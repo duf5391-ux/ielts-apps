@@ -1,0 +1,38 @@
+name: Build IELTS Windows and iOS entries
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'DesktopIOS/**'
+      - 'config/**'
+      - '.github/workflows/desktop-ios-build.yml'
+permissions:
+  contents: read
+jobs:
+  entries:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: shiaho777/WebToApp
+          ref: 3704633018bfef5fbf2783e3b59870eac8bc109c
+          path: vendor/WebToApp
+          persist-credentials: false
+      - name: Install pinned image and upstream import dependencies
+        run: python3 -m pip install Pillow==11.3.0 httpx==0.27.0
+      - name: Generate and validate the two entry packages
+        run: python3 DesktopIOS/build_desktop_ios.py --upstream vendor/WebToApp --config config/app.json --output artifacts/desktop-ios
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ielts-desktop-ios-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            artifacts/desktop-ios/windows.zip
+            artifacts/desktop-ios/ios.mobileconfig
+            artifacts/desktop-ios/desktop-ios-report.json
