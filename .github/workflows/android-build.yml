@@ -1,0 +1,90 @@
+name: Build IELTS Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'Android/**'
+      - 'config/icon.png'
+      - '.github/workflows/android-build.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Fetch the pinned upstream tool
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: shiaho777/WebToApp
+          ref: 3704633018bfef5fbf2783e3b59870eac8bc109c
+          path: vendor/WebToApp
+          persist-credentials: false
+      - name: Restore the persistent signing identity
+        env:
+          IELTS_ANDROID_KEYSTORE_B64: ${{ secrets.IELTS_ANDROID_KEYSTORE_B64 }}
+          IELTS_ANDROID_KEY_METADATA_B64: ${{ secrets.IELTS_ANDROID_KEY_METADATA_B64 }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os
+          from pathlib import Path
+          private = Path(os.environ['RUNNER_TEMP']) / 'ielts-android-signing'
+          private.mkdir(mode=0o700, exist_ok=True)
+          for secret, filename in [('IELTS_ANDROID_KEYSTORE_B64', 'ieltsstudy.keystore'),
+                                   ('IELTS_ANDROID_KEY_METADATA_B64', 'ieltsstudy.json')]:
+              value = os.environ.get(secret, '')
+              if not value:
+                  raise SystemExit('Persistent Android signing secret missing; no replacement will be created')
+              raw = base64.b64decode(value, validate=True)
+              path = private / filename
+              path.write_bytes(raw)
+              path.chmod(0o600)
+          meta = json.loads((private / 'ieltsstudy.json').read_text(encoding='utf-8-sig'))
+          if not all(isinstance(meta.get(k), str) and meta[k] for k in ('alias', 'password')):
+              raise SystemExit('Signing metadata is invalid')
+          # GitHub also masks decoded values if a tool emits a diagnostic.
+          print('::add-mask::' + meta['password'])
+          PY
+      - name: Build and verify the signed APK with existing SDK tools
+        run: |
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          python3 Android/build_android.py \
+            --upstream vendor/WebToApp \
+            --icon config/icon.png \
+            --key-dir "$RUNNER_TEMP/ielts-android-signing" \
+            --output artifacts/android
+      - name: Upload only the APK and public verification reports
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ielts-android-1.0.0-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            artifacts/android/android.apk
+            artifacts/android/report.json
+            artifacts/android/apksigner-verify.txt
+            artifacts/android/apk-badging.txt
+      - name: Remove ephemeral runner copies of the signing identity
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import os, shutil
+          from pathlib import Path
+          temp = Path(os.environ['RUNNER_TEMP']).resolve()
+          private = (temp / 'ielts-android-signing').resolve()
+          if private.parent != temp:
+              raise SystemExit('Unexpected signing directory')
+          shutil.rmtree(private, ignore_errors=True)
+          PY

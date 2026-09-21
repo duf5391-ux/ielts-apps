@@ -1,0 +1,8 @@
+{
+  "application_id": "app.ielts.ieltsstudy",
+  "certificate_sha256": "227c1f1e41a5a18543e6a846bd6ad554b5adc8069521cbcbcbfbd62987faae07",
+  "format": "PKCS12",
+  "alias": "ieltsstudy",
+  "not_after": "2054-02-05T17:57:31+00:00",
+  "private_identity": "Stored locally and excluded from all publication inputs."
+}

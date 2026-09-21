@@ -1,0 +1,22 @@
+{
+  "id": "ieltsstudy",
+  "url": "https://duf5391-ux.github.io/ielts-learning/",
+  "name": "雅思学习册",
+  "color": "#356c57",
+  "display": "standalone",
+  "orientation": "any",
+  "source_type": "url",
+  "android_version_code": 1,
+  "android_version_name": "1.0.0",
+  "android_package_prefix": "app.ielts",
+  "android_package_name": "app.ielts.ieltsstudy",
+  "options": {
+    "feature-immersive-fullscreen": false,
+    "feature-desktop-mode": false,
+    "windows-window-width": 1280,
+    "windows-window-height": 900,
+    "windows-window-maximized": false
+  },
+  "tool_source": "https://github.com/shiaho777/WebToApp",
+  "tool_commit": "3704633018bfef5fbf2783e3b59870eac8bc109c"
+}
