@@ -25,8 +25,8 @@ PACKAGE = "app.ielts.ieltsstudy"
 APP_NAME = "雅思学习册"
 URL = "https://duf5391-ux.github.io/ielts-learning/"
 THEME = "#356c57"
-VERSION_CODE = 1
-VERSION_NAME = "1.0.0"
+VERSION_CODE = 2
+VERSION_NAME = "1.1.0"
 
 
 class BuildError(RuntimeError):
@@ -57,6 +57,15 @@ def replace_once(source: str, old: str, new: str) -> str:
 def adapt_template(module):
     """Small IELTS policy/theme adapter; retain upstream storage/media bridges."""
     java = module.ACTIVITY_JAVA
+    fragment = Path(__file__).with_name('offline.java.fragment').read_text(encoding='utf-8')
+    java = replace_once(java, '    @Override protected void onCreate(Bundle b) {', fragment + '\n    @Override protected void onCreate(Bundle b) {')
+    java = replace_once(java,
+        'public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {',
+        '''public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                if (request != null && request.getUrl() != null) {
+                    WebResourceResponse local = bundledResponse(request.getUrl(), request.getMethod(), request.getRequestHeaders());
+                    if (local != null) return local;
+                }''')
     java = replace_once(java, "webView = new WebView(this);", """webView = new WebView(this);
         webView.setBackgroundColor(android.graphics.Color.parseColor("#356c57"));
         getWindow().setStatusBarColor(android.graphics.Color.parseColor("#356c57"));
@@ -207,7 +216,7 @@ def build(args):
     adaptations = adapt_template(module)
 
     class IeltsBuilder(module.ApkBuilder):
-        TEMPLATE_REVISION = "2026-09-21-ielts-https-audio-1"
+        TEMPLATE_REVISION = "2026-09-25-ielts-offline-2"
 
         def _find_tools(self, name):
             return [str(bt / name)] if (bt / name).is_file() else []
@@ -233,6 +242,10 @@ def build(args):
                                   "res/mipmap/ic_launcher.png": icon_png})
                 with zipfile.ZipFile(patched, "a", zipfile.ZIP_DEFLATED) as archive:
                     archive.writestr("assets/licenses/WebToApp-MIT.txt", (upstream / "LICENSE").read_bytes())
+                    # Uncompressed immutable assets support AssetFileDescriptor seeks.
+                    for item in sorted(args.site.rglob('*')):
+                        if item.is_file():
+                            archive.write(item, 'assets/site/' + item.relative_to(args.site).as_posix(), compress_type=zipfile.ZIP_STORED)
                 output.parent.mkdir(parents=True, exist_ok=True)
                 self._align_apk(patched, output)
                 run([str(bt / "apksigner"), "sign", "--ks", str(keystore), "--ks-key-alias", meta["alias"],
@@ -268,6 +281,11 @@ def build(args):
     if "android.permission.CAMERA" in badging or "android.permission.ACCESS_FINE_LOCATION" in badging:
         raise BuildError("APK contains an unneeded camera/location permission")
     with zipfile.ZipFile(apk) as zf:
+        for item in sorted(args.site.rglob('*')):
+            if item.is_file():
+                name = 'assets/site/' + item.relative_to(args.site).as_posix()
+                if zf.getinfo(name).compress_type != zipfile.ZIP_STORED or hashlib.sha256(zf.read(name)).hexdigest() != sha(item):
+                    raise BuildError('Bundled asset differs: ' + name)
         config = json.loads(zf.read("assets/webtoapp_config.json"))
         if config.get("url") != URL or config.get("desktop_mode") or config.get("immersive_fullscreen"):
             raise BuildError("APK embedded URL or mobile-mode configuration mismatch")
@@ -287,8 +305,9 @@ def build(args):
         "sdk_license_acceptance_executed": False, "apk_sha256": sha(apk), "apk_bytes": apk.stat().st_size,
         "icon_sha256": sha(icon), "certificate_sha256": cert_sha,
         "signature_verification": "passed", "zip_alignment_verification": "passed",
-        "artifact_kind": "signed Android APK (online URL shell)",
-        "physical_device_tested": False, "personal_record_cloud_sync": False,
+        "artifact_kind": "signed Android APK with complete bundled learning site",
+        "physical_device_tested": False, "personal_record_cloud_sync": "Existing site account integration; real device validation pending",
+        "bundled_assets_verified": True,
         "runtime_adapter": adaptations,
         "source_files": {p: sha(upstream / p) for p in (
             "server/engine/apk_builder.py", "server/engine/apk_v2_signer.py", "server/config.py")},
@@ -307,6 +326,7 @@ def main():
     parser.add_argument("--icon", type=Path, required=True)
     parser.add_argument("--key-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--site", type=Path, required=True)
     args = parser.parse_args()
     try:
         build(args)

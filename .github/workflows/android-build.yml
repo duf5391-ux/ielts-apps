@@ -3,11 +3,12 @@ name: Build IELTS Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, codex/native-ipad-offline]
     paths:
       - 'Android/**'
       - 'config/icon.png'
       - '.github/workflows/android-build.yml'
+      - 'NativeIOS/prepare_bundle.py'
 
 permissions:
   contents: read
@@ -56,6 +57,14 @@ jobs:
           # GitHub also masks decoded values if a tool emits a diagnostic.
           print('::add-mask::' + meta['password'])
           PY
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: duf5391-ux/ielts-learning
+          ref: 1dd86b0486750bad7a5ab04ecfd9f654a052ae0a
+          path: vendor/site-publication
+          persist-credentials: false
+      - name: Verify and prepare the offline site
+        run: python3 NativeIOS/prepare_bundle.py vendor/site-publication artifacts/bundle/site
       - name: Build and verify the signed APK with existing SDK tools
         run: |
           export JAVA_HOME="$JAVA_HOME_17_X64"
@@ -64,11 +73,12 @@ jobs:
             --upstream vendor/WebToApp \
             --icon config/icon.png \
             --key-dir "$RUNNER_TEMP/ielts-android-signing" \
-            --output artifacts/android
+            --output artifacts/android \
+            --site artifacts/bundle/site
       - name: Upload only the APK and public verification reports
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: ielts-android-1.0.0-${{ github.run_number }}
+          name: ielts-android-1.1.0-${{ github.run_number }}
           if-no-files-found: error
           retention-days: 30
           path: |

@@ -1,0 +1,68 @@
+    private WebResourceResponse bundledResponse(Uri uri, String method, java.util.Map<String,String> requestHeaders) {
+        if (!isStudyOrigin(uri) || uri.getPath() == null || !uri.getPath().startsWith("/ielts-learning/")) return null;
+        java.util.Map<String,String> headers = new java.util.HashMap<String,String>();
+        headers.put("Cache-Control", "no-cache");
+        headers.put("X-Content-Type-Options", "nosniff");
+        headers.put("Accept-Ranges", "bytes");
+        java.io.InputStream stream = null;
+        try {
+            if (!"GET".equals(method) && !"HEAD".equals(method)) throw new java.io.IOException("method");
+            String path = uri.getPath().substring("/ielts-learning/".length());
+            if (path.isEmpty()) path = "index.html";
+            if (path.indexOf('\0') >= 0 || path.indexOf('\\') >= 0 || java.util.Arrays.asList(path.split("/")).contains("..")) throw new java.io.IOException("path");
+            android.content.res.AssetFileDescriptor descriptor = getAssets().openFd("site/" + path);
+            long size = descriptor.getLength();
+            stream = descriptor.createInputStream();
+            long start = 0, length = size;
+            int status = 200;
+            String range = null;
+            for (java.util.Map.Entry<String,String> entry : requestHeaders.entrySet()) {
+                if ("Range".equalsIgnoreCase(entry.getKey())) range = entry.getValue();
+            }
+            if (range != null && "GET".equals(method)) {
+                try {
+                    if (!range.startsWith("bytes=") || range.contains(",") || size == 0) throw new Exception();
+                    String[] bounds = range.substring(6).split("-", -1);
+                    if (bounds.length != 2) throw new Exception();
+                    if (bounds[0].isEmpty()) {
+                        long suffix = Long.parseLong(bounds[1]);
+                        if (suffix <= 0) throw new Exception();
+                        length = Math.min(size, suffix); start = size - length;
+                    } else {
+                        start = Long.parseLong(bounds[0]);
+                        long end = bounds[1].isEmpty() ? size - 1 : Math.min(size - 1, Long.parseLong(bounds[1]));
+                        if (start < 0 || start >= size || end < start) throw new Exception();
+                        length = end - start + 1;
+                    }
+                    status = 206;
+                    headers.put("Content-Range", "bytes " + start + "-" + (start + length - 1) + "/" + size);
+                } catch (Exception invalid) {
+                    stream.close(); headers.put("Content-Range", "bytes */" + size); headers.put("Content-Length", "0");
+                    return new WebResourceResponse("text/plain", "utf-8", 416, "Range Not Satisfiable", headers, new java.io.ByteArrayInputStream(new byte[0]));
+                }
+            }
+            headers.put("Content-Length", Long.toString(length));
+            while (start > 0) { long skipped = stream.skip(start); if (skipped <= 0) throw new java.io.IOException("seek"); start -= skipped; }
+            if ("HEAD".equals(method)) { stream.close(); stream = new java.io.ByteArrayInputStream(new byte[0]); }
+            final long responseLength = length;
+            java.io.InputStream limited = new java.io.FilterInputStream(stream) {
+                long remaining = responseLength;
+                @Override public int read() throws java.io.IOException { if (remaining <= 0) return -1; int value = in.read(); if (value != -1) remaining--; return value; }
+                @Override public int read(byte[] data, int offset, int count) throws java.io.IOException { if (remaining <= 0) return -1; int got = in.read(data, offset, (int)Math.min(remaining, count)); if (got > 0) remaining -= got; return got; }
+                @Override public long skip(long count) throws java.io.IOException { long got = in.skip(Math.min(remaining, count)); remaining -= got; return got; }
+                @Override public int available() throws java.io.IOException { return (int)Math.min(remaining, in.available()); }
+            };
+            String extension = path.contains(".") ? path.substring(path.lastIndexOf('.') + 1).toLowerCase(java.util.Locale.US) : "";
+            String mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
+            if ("js".equals(extension)) mime = "text/javascript";
+            if ("json".equals(extension)) mime = "application/json";
+            if ("webmanifest".equals(extension)) mime = "application/manifest+json";
+            if (mime == null) mime = "application/octet-stream";
+            return new WebResourceResponse(mime, "utf-8", status, status == 206 ? "Partial Content" : "OK", headers, limited);
+        } catch (Exception missing) {
+            try { if (stream != null) stream.close(); } catch (Exception ignored) {}
+            headers.put("Content-Length", "0");
+            // Never silently fetch missing learning files from GitHub.
+            return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found", headers, new java.io.ByteArrayInputStream(new byte[0]));
+        }
+    }
