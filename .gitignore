@@ -3,3 +3,9 @@ artifacts/
 private/
 *.keystore
 __pycache__/
+NativeIOS/site/
+NativeIOS/build/
+NativeIOS/*.xcodeproj/
+NativeIOS/bundle-report.json
+NativeIOS/build-*.log
+NativeIOS/Assets.xcassets/

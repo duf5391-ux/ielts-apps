@@ -1,0 +1,50 @@
+name: IELTSStudy
+options:
+  deploymentTarget:
+    iOS: '16.0'
+settings:
+  base:
+    PRODUCT_BUNDLE_IDENTIFIER: app.ielts.ieltsstudy
+    SWIFT_VERSION: '5.0'
+    TARGETED_DEVICE_FAMILY: '1,2'
+    MARKETING_VERSION: '1.1.0'
+    CURRENT_PROJECT_VERSION: '2'
+    CODE_SIGNING_ALLOWED: NO
+targets:
+  IELTSStudy:
+    type: application
+    platform: iOS
+    sources:
+      - App.swift
+      - HTTPFile.swift
+      - LocalServer.swift
+      - path: Assets.xcassets
+      - path: site
+        type: folder
+        buildPhase: resources
+      - path: smoke.js
+        buildPhase: resources
+    info:
+      path: build/Info.plist
+      properties:
+        CFBundleDisplayName: 雅思学习册
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSMicrophoneUsageDescription: 录制你的口语练习，录音保存在本机，只有你选择导出时才会分享。
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO

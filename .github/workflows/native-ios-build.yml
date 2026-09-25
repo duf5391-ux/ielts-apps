@@ -1,0 +1,57 @@
+name: Build native IELTS iPad and iPhone app
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/native-ipad-offline]
+    paths: ['NativeIOS/**', '.github/workflows/native-ios-build.yml']
+permissions:
+  contents: read
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: duf5391-ux/ielts-learning
+          ref: 1dd86b0486750bad7a5ab04ecfd9f654a052ae0a
+          path: vendor/site-publication
+          persist-credentials: false
+      - name: Verify the full published content and generate Xcode project
+        run: |
+          python3 NativeIOS/prepare_bundle.py vendor/site-publication NativeIOS/site
+          brew install xcodegen
+          cd NativeIOS
+          xcodegen generate
+          swiftc HTTPFile.swift HTTPFileTests.swift -o build/http-tests
+          build/http-tests
+      - name: Compile an actual arm64 iOS app
+        run: |
+          cd NativeIOS
+          xcodebuild -project IELTSStudy.xcodeproj -scheme IELTSStudy -configuration Release -sdk iphoneos -derivedDataPath build/device CODE_SIGNING_ALLOWED=NO build > build-device.log 2>&1 || { tail -100 build-device.log; exit 1; }
+          mkdir -p ../artifacts/ios/Payload
+          cp -R build/device/Build/Products/Release-iphoneos/IELTSStudy.app ../artifacts/ios/Payload/
+          cd ../artifacts/ios
+          /usr/bin/zip -qr IELTSStudy-iPad-iPhone-unsigned.ipa Payload
+          shasum -a 256 IELTSStudy-iPad-iPhone-unsigned.ipa > SHA256SUMS.txt
+      - name: Build and test iPad simulator with external requests blocked
+        run: |
+          cd NativeIOS
+          xcodebuild -project IELTSStudy.xcodeproj -scheme IELTSStudy -configuration Debug -sdk iphonesimulator -derivedDataPath build/simulator CODE_SIGNING_ALLOWED=NO build > build-simulator.log 2>&1 || { tail -100 build-simulator.log; exit 1; }
+          python3 verify_simulator.py
+      - name: Upload IPA, evidence and build logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ielts-native-ios-${{ github.run_number }}
+          retention-days: 30
+          path: |
+            artifacts/ios/*.ipa
+            artifacts/ios/*.txt
+            artifacts/ios/*.json
+            artifacts/ios/*.png
+            NativeIOS/bundle-report.json
+            NativeIOS/build-*.log
