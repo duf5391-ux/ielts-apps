@@ -1,0 +1,37 @@
+name: Inspect native iOS build evidence
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/native-ipad-offline]
+    paths: ['.github/workflows/inspect-native-ios.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Read the failed simulator evidence and packaged Info.plist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 36110054638 --repo duf5391-ux/ielts-apps --pattern 'ielts-native-ios-6' --dir evidence
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, plistlib, zipfile
+          for path in Path('evidence').rglob('native-runtime.log'):
+              text = path.read_text(errors='replace')
+              print('NATIVE RUNTIME:', text[-25000:])
+          ipa = next(Path('evidence').rglob('*.ipa'))
+          with zipfile.ZipFile(ipa) as z:
+              info = plistlib.loads(z.read('Payload/IELTSStudy.app/Info.plist'))
+              print('PACKAGED INFO:',json.dumps(info,ensure_ascii=False,indent=2,default=str))
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-ios-runtime-evidence
+          path: |
+            evidence/**/*.png
+            evidence/**/native-runtime.log
+            evidence/**/bundle-report.json
