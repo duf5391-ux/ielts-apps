@@ -5,7 +5,7 @@ import urllib.request
 from pathlib import Path
 
 def run(*args):
-    return subprocess.check_output(args, text=True).strip()
+    return subprocess.check_output(args, text=True, timeout=100).strip()
 
 devices = json.loads(run('xcrun','simctl','list','devices','available','--json'))
 device = next(d for group in devices['devices'].values() for d in group if 'iPad' in d['name'])
@@ -22,8 +22,10 @@ artifact.mkdir(parents=True, exist_ok=True)
 for phase in ['cold-start', 'restart']:
     try:
         run('xcrun','simctl','launch',udid,'app.ielts.ieltsstudy','--offline-smoke-test')
-    except subprocess.CalledProcessError:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         subprocess.run(['xcrun','simctl','spawn',udid,'log','show','--last','1m','--predicate','process == "IELTSStudy" OR eventMessage CONTAINS "app.ielts.ieltsstudy"'], check=False)
+        for report in (Path.home()/'Library/Logs/DiagnosticReports').glob('IELTSStudy*'):
+            print('CRASH REPORT', report.name, report.read_text(errors='replace')[:12000], flush=True)
         raise
     container = Path(run('xcrun','simctl','get_app_container',udid,'app.ielts.ieltsstudy','data'))
     result = container / 'Documents/offline-smoke.json'
