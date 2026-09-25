@@ -17,10 +17,15 @@ final class StudyController: UIViewController, WKNavigationDelegate, WKUIDelegat
     private var server: LocalServer!
     private var downloaded = [ObjectIdentifier: URL]()
     private var smokeStarted = false
+    #if DEBUG
     private let smoke = ProcessInfo.processInfo.arguments.contains("--offline-smoke-test")
+    #else
+    private let smoke = false
+    #endif
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        stage("view-loaded")
         view.backgroundColor = UIColor(red: 0.98, green: 0.98, blue: 0.96, alpha: 1)
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
@@ -45,6 +50,7 @@ final class StudyController: UIViewController, WKNavigationDelegate, WKUIDelegat
             """
             WKContentRuleListStore.default().compileContentRuleList(forIdentifier: "offline-test", encodedContentRuleList: rules) { [weak self] list, error in
                 guard let self = self else { return }
+                self.stage("network-rules-ready")
                 guard let list = list else { self.writeSmoke(["error": String(describing: error)]); return }
                 config.userContentController.add(list); self.start()
             }
@@ -54,7 +60,8 @@ final class StudyController: UIViewController, WKNavigationDelegate, WKUIDelegat
     private func start() {
         server.start { [weak self] error in
             guard let self = self else { return }
-            if let error = error { self.alert("无法打开学习册", message: "本机内容服务启动失败，请关闭 App 后重试。\n\(error.localizedDescription)"); return }
+            if let error = error { if self.smoke { self.writeSmoke(["serverError":error.localizedDescription]) }; self.alert("无法打开学习册", message: "本机内容服务启动失败，请关闭 App 后重试。\n\(error.localizedDescription)"); return }
+            self.stage("server-ready")
             self.web.load(URLRequest(url: URL(string: HTTPFile.origin + "/index.html")!))
         }
     }
@@ -126,7 +133,14 @@ final class StudyController: UIViewController, WKNavigationDelegate, WKUIDelegat
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { webView.reload() }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        if smoke { writeSmoke(["navigationError":error.localizedDescription, "details":String(describing:error)]) }
+    }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        if smoke { writeSmoke(["navigationError":error.localizedDescription]) }
+    }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        stage("navigation-finished")
         guard smoke, !smokeStarted, isLocal(webView.url) else { return }
         smokeStarted = true
         let script = (try? String(contentsOf: Bundle.main.url(forResource: "smoke", withExtension: "js")!, encoding: .utf8)) ?? "return {error:'no smoke script'};"
@@ -141,6 +155,11 @@ final class StudyController: UIViewController, WKNavigationDelegate, WKUIDelegat
     private func writeSmoke(_ report: [String: Any]) {
         let file = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("offline-smoke.json")
         if let data = try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]) { try? data.write(to: file, options: .atomic) }
+    }
+    private func stage(_ value: String) {
+        guard smoke else { return }
+        let file = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("native-stage.txt")
+        try? value.write(to:file, atomically:true, encoding:.utf8)
     }
     private func alert(_ title: String, message: String) {
         let sheet = UIAlertController(title: title, message: message, preferredStyle: .alert)

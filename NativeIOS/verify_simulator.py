@@ -1,6 +1,7 @@
 import json
 import subprocess
 import time
+import urllib.request
 from pathlib import Path
 
 def run(*args):
@@ -29,7 +30,16 @@ for phase in ['cold-start', 'restart']:
     deadline = time.monotonic() + 120
     while not result.exists() and time.monotonic() < deadline:
         time.sleep(2)
-    assert result.exists(), 'WebKit smoke test timed out'
+    run('xcrun','simctl','io',udid,'screenshot',str(artifact / f'ipad-{phase}.png'))
+    if not result.exists():
+        stage = container / 'Documents/native-stage.txt'
+        print('Native stage:', stage.read_text() if stage.exists() else 'no stage', flush=True)
+        try:
+            with urllib.request.urlopen('http://127.0.0.1:18761/index.html', timeout=10) as response:
+                print('Loopback HTTP:', response.status, response.read(100), flush=True)
+        except Exception as e: print('Loopback HTTP:', repr(e), flush=True)
+        subprocess.run(['xcrun','simctl','spawn',udid,'log','show','--last','3m','--predicate','process == "IELTSStudy"'], stdout=(artifact/'native-runtime.log').open('w'), timeout=30)
+        raise AssertionError('WebKit smoke test timed out')
     report = json.loads(result.read_text())
     (artifact / f'{phase}.json').write_text(json.dumps(report, indent=2, ensure_ascii=False))
     print(phase, json.dumps(report, ensure_ascii=False))
@@ -38,7 +48,6 @@ for phase in ['cold-start', 'restart']:
     if phase == 'restart':
         assert report.get('restartPersistence'), 'WKWebsiteDataStore did not persist'
         assert report.get('answerRestored'), 'Actual saved answer did not restore'
-    run('xcrun','simctl','io',udid,'screenshot',str(artifact / f'ipad-{phase}.png'))
     run('xcrun','simctl','terminate',udid,'app.ielts.ieltsstudy')
     result.unlink()
 print('Offline native iPad startup, range playback reads, answer restart restore and Blob export passed')

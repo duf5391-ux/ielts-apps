@@ -53,5 +53,6 @@ jobs:
             artifacts/ios/*.txt
             artifacts/ios/*.json
             artifacts/ios/*.png
+            artifacts/ios/*.log
             NativeIOS/bundle-report.json
             NativeIOS/build-*.log
