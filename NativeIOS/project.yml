@@ -42,6 +42,10 @@ targets:
         NSMicrophoneUsageDescription: 录制你的口语练习，录音保存在本机，只有你选择导出时才会分享。
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+          NSExceptionDomains:
+            '127.0.0.1':
+              NSExceptionAllowsInsecureHTTPLoads: true
+              NSIncludesSubdomains: false
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
     settings:
