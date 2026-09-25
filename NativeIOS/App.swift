@@ -130,7 +130,7 @@ final class StudyController: UIViewController, WKNavigationDelegate, WKUIDelegat
         guard smoke, !smokeStarted, isLocal(webView.url) else { return }
         smokeStarted = true
         let script = (try? String(contentsOf: Bundle.main.url(forResource: "smoke", withExtension: "js")!, encoding: .utf8)) ?? "return {error:'no smoke script'};"
-        webView.callAsyncJavaScript(script, arguments: [:], in: nil, contentWorld: .page) { [weak self] result in
+        webView.callAsyncJavaScript(script, arguments: [:], in: nil, in: .page) { [weak self] result in
             switch result {
             case .success(let value): self?.writeSmoke(value as? [String: Any] ?? ["error":"invalid report"])
             case .failure(let error): self?.writeSmoke(["error": error.localizedDescription])
